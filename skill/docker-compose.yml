@@ -21,7 +21,7 @@ services:
   embedding:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.txt
       target: embedding
     container_name: memvault-embedding
     ports:
@@ -36,7 +36,7 @@ services:
   memvault:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.txt
       target: server
     container_name: memvault-server
     ports:

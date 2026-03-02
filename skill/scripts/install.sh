@@ -102,9 +102,9 @@ done
 
 # ── 6. Install CLI ──
 step "6/6 Installing memvault CLI..."
-chmod +x "$SKILL_DIR/scripts/memvault"
+chmod +x "$SKILL_DIR/scripts/memvault.sh"
 mkdir -p "$HOME/.local/bin"
-ln -sf "$SKILL_DIR/scripts/memvault" "$HOME/.local/bin/memvault"
+ln -sf "$SKILL_DIR/scripts/memvault.sh" "$HOME/.local/bin/memvault"
 
 # Add to PATH if needed
 if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
