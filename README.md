@@ -42,7 +42,19 @@ Avg strength: 0.51  |  Max access count: 305
 
 ## 🚀 Quick Start
 
-### Option A: Docker (Recommended — No Python version hassles)
+### Option A: OpenClaw Skill (One Command)
+
+If you use [OpenClaw](https://openclaw.ai):
+
+```bash
+clawhub install memvault
+cd ~/.openclaw/workspace/skills/memvault
+bash scripts/install.sh
+```
+
+Done. `memvault` CLI is ready. Add the snippet from `SKILL.md` to your `TOOLS.md`.
+
+### Option B: Docker (Recommended — No Python version hassles)
 
 ```bash
 git clone https://github.com/wjy9902/memvault.git
@@ -60,7 +72,7 @@ That's it. PostgreSQL, embedding server, and MemVault are all running.
 > ```
 > Or set `MEMVAULT_LLM_BASE_URL` to any OpenAI-compatible endpoint (OpenAI, Groq, etc.)
 
-### Option B: Native Install
+### Option C: Native Install
 
 > ⚠️ **Requires Python 3.13+** (memU dependency). Check with `python3 --version`.
 > If you have an older Python, use Docker (Option A) instead.
