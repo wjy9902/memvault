@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# MemVault CLI — Simple memory operations for AI agents
+set -e
+
+MEMVAULT_URL="${MEMVAULT_URL:-http://localhost:8002}"
+
+case "$1" in
+  memorize)
+    USER_ID="${2:-default}"
+    CONV_FILE="$3"
+    [[ -z "$CONV_FILE" ]] && echo "Usage: memvault memorize <user_id> <conv.json>" && exit 1
+    CONV=$(cat "$CONV_FILE")
+    curl -s -X POST "$MEMVAULT_URL/memorize" -H "Content-Type: application/json" \
+      -d "{\"conversation\": $CONV, \"user_id\": \"$USER_ID\"}"
+    ;;
+  memorize-text)
+    USER_ID="${2:-default}"; USER_MSG="$3"; ASST_MSG="$4"
+    [[ -z "$USER_MSG" ]] && echo "Usage: memvault memorize-text <user_id> <message> [reply]" && exit 1
+    if [[ -z "$ASST_MSG" ]]; then
+      CONV="[{\"role\": \"user\", \"content\": $(echo "$USER_MSG" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read().strip()))')}]"
+    else
+      CONV="[{\"role\": \"user\", \"content\": $(echo "$USER_MSG" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read().strip()))')}, {\"role\": \"assistant\", \"content\": $(echo "$ASST_MSG" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read().strip()))')}]"
+    fi
+    curl -s -X POST "$MEMVAULT_URL/memorize" -H "Content-Type: application/json" \
+      -d "{\"conversation\": $CONV, \"user_id\": \"$USER_ID\"}"
+    ;;
+  retrieve)
+    USER_ID="${2:-default}"; QUERY="$3"
+    [[ -z "$QUERY" ]] && echo "Usage: memvault retrieve <user_id> <query>" && exit 1
+    curl -s -X POST "$MEMVAULT_URL/retrieve" -H "Content-Type: application/json" \
+      -d "{\"query\": $(echo "$QUERY" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read().strip()))'), \"user_id\": \"$USER_ID\"}"
+    ;;
+  decay)
+    USER_ID="${2:-default}"
+    curl -s -X POST "$MEMVAULT_URL/decay?user_id=$USER_ID"
+    ;;
+  stats)
+    USER_ID="${2:-default}"
+    curl -s "$MEMVAULT_URL/stats?user_id=$USER_ID"
+    ;;
+  categories)
+    USER_ID="${2:-default}"
+    curl -s "$MEMVAULT_URL/categories?user_id=$USER_ID"
+    ;;
+  health)
+    curl -s "$MEMVAULT_URL/health"
+    ;;
+  *)
+    cat << 'HELP'
+MemVault — Long-term Memory for AI Agents
+
+Commands:
+  memorize-text <user_id> <msg> [reply]  Store a single exchange
+  memorize <user_id> <conv.json>         Store conversation from JSON
+  retrieve <user_id> <query>             Retrieve relevant memories
+  decay [user_id]                        Run Ebbinghaus memory decay
+  stats [user_id]                        Show memory statistics
+  categories <user_id>                   List memory categories
+  health                                 Check service health
+
+Environment:
+  MEMVAULT_URL  Server URL (default: http://localhost:8002)
+
+Examples:
+  memvault memorize-text myuser "I prefer dark mode" "Noted!"
+  memvault retrieve myuser "what theme does the user like?"
+  memvault stats myuser
+  memvault decay myuser
+HELP
+    ;;
+esac
