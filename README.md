@@ -5,11 +5,12 @@
 ### Production-Ready Long-Term Memory for AI Agents
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
+[![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)](https://docs.docker.com/compose/)
 
 **Store → Retrieve → Forget — just like humans do.**
 
-[Quick Start](#-quick-start) · [How It Works](#-how-it-works) · [API Reference](#-api-reference) · [OpenClaw Integration](#-openclaw-integration)
+[Quick Start](#-quick-start) · [How It Works](#-how-it-works) · [API](#-api-reference) · [OpenClaw](#-openclaw-integration) · [Docker](#-docker-recommended)
 
 </div>
 
@@ -19,52 +20,75 @@
 
 AI agents forget everything between sessions. MemVault gives them a real memory system:
 
-- **🧠 Ebbinghaus Decay** — Memories fade over time, just like human memory. Old, unused memories naturally weaken while frequently accessed ones stay strong.
-- **⚡ Strength-Weighted Retrieval** — Search results are ranked by `similarity × strength`. Recent, important memories surface first.
-- **🏠 100% Local** — Runs entirely on your machine. Ollama for LLM, sentence-transformers for embeddings, PostgreSQL for storage. No API keys, no cloud dependencies.
-- **🌍 Multi-Language Translation** — Optionally translate memory summaries to your language (Chinese, Japanese, Spanish, etc.) via local LLM.
-- **📊 Built-in Analytics** — Track memory distribution, access patterns, and health at a glance.
+- **🧠 Ebbinghaus Decay** — Memories fade over time. Old, unused memories weaken; frequently accessed ones stay strong.
+- **⚡ Strength-Weighted Retrieval** — Results ranked by `similarity × strength`. Important memories surface first.
+- **🏠 100% Local** — Ollama for LLM, sentence-transformers for embeddings, PostgreSQL for storage. No API keys needed.
+- **🌍 Multi-Language** — Optionally translate memory summaries to your language via local LLM.
+- **📊 Built-in Analytics** — Track memory distribution, access patterns, and health.
 
-Built on [memU](https://github.com/NevaMind-AI/memU) as the extraction engine. MemVault adds the production layer: HTTP API, memory decay, weighted retrieval, multi-agent tracking, and one-command setup.
+Built on [memU](https://github.com/NevaMind-AI/memU) as the extraction engine. MemVault adds: HTTP API, memory decay, weighted retrieval, multi-agent tracking, and one-command setup.
+
+### Real Production Stats
+
+Running 3+ weeks with 12,000+ memories:
+
+```
+Total: 12,599 memories
+Strong (≥0.8): 2,142  |  Medium: 7,273  |  Weak: 3,150  |  Fading: 34
+Avg strength: 0.51  |  Max access count: 305
+```
 
 ---
 
 ## 🚀 Quick Start
 
-### Prerequisites
-
-- Docker (for PostgreSQL + pgvector)
-- Python 3.11+
-- [Ollama](https://ollama.com) (or any OpenAI-compatible LLM endpoint)
-
-### Install
+### Option A: Docker (Recommended — No Python version hassles)
 
 ```bash
 git clone https://github.com/wjy9902/memvault.git
 cd memvault
-bash scripts/setup.sh    # Installs everything: PostgreSQL, Ollama model, Python deps
+docker compose up -d
 ```
 
-### Start
+That's it. PostgreSQL, embedding server, and MemVault are all running.
+
+> **Note:** You still need Ollama running on your host for LLM extraction:
+> ```bash
+> # Install: https://ollama.com
+> ollama pull qwen2.5:3b
+> ollama serve
+> ```
+> Or set `MEMVAULT_LLM_BASE_URL` to any OpenAI-compatible endpoint (OpenAI, Groq, etc.)
+
+### Option B: Native Install
+
+> ⚠️ **Requires Python 3.13+** (memU dependency). Check with `python3 --version`.
+> If you have an older Python, use Docker (Option A) instead.
 
 ```bash
-bash scripts/start.sh
+git clone https://github.com/wjy9902/memvault.git
+cd memvault
+bash scripts/setup.sh     # PostgreSQL + Ollama + Python deps
+bash scripts/start.sh     # Start all services
 ```
 
-### Use
+### Test It
 
 ```bash
 # Store a memory
-memvault memorize-text myagent "User prefers dark mode and midnight snacks" "Got it!"
+curl -X POST http://localhost:8002/memorize \
+  -H "Content-Type: application/json" \
+  -d '{"conversation": [{"role": "user", "content": "I love Python and dark mode"}], "user_id": "alice"}'
 
-# Retrieve relevant memories
-memvault retrieve myagent "what are the user's preferences?"
+# Retrieve
+curl -X POST http://localhost:8002/retrieve \
+  -H "Content-Type: application/json" \
+  -d '{"query": "what does the user prefer?", "user_id": "alice"}'
 
-# Run memory decay (do this daily)
-memvault decay myagent
-
-# Check statistics
-memvault stats myagent
+# Or use the CLI
+memvault memorize-text alice "I love Python and dark mode" "Noted!"
+memvault retrieve alice "user preferences"
+memvault stats alice
 ```
 
 ---
@@ -81,111 +105,97 @@ Conversation → Extract (LLM) → Embed → Store (pgvector) → Retrieve (weig
 
 ### Ebbinghaus Forgetting Curve
 
-Every memory has a `strength` (0.0 → 1.0) that decays over time:
+Every memory has a `strength` (0.01 → 1.0) that decays over time:
 
 ```
 strength = exp(-rate × days / (1 + damping × ln(1 + access_count)))
 ```
 
 - **New memories** start at strength 1.0
-- **Unused memories** fade toward 0 over weeks
-- **Frequently accessed memories** decay much slower (the `access_count` damping)
+- **Unused memories** fade over weeks
+- **Frequently accessed** memories decay much slower
 - **Fading memories** (strength < 0.1) are excluded from retrieval
-- Run `/decay` daily via cron to keep memories fresh
+- Run `/decay` daily via cron
 
 ### Strength-Weighted Retrieval
 
-Standard vector search: `rank = cosine_similarity(query, memory)`
-
-MemVault search: **`rank = cosine_similarity(query, memory) × strength`**
-
-This means a highly relevant but ancient memory scores lower than a moderately relevant but recent one — matching how human recall actually works.
-
-### Real Production Stats
-
-From a live deployment running for 3+ weeks with 12,000+ memories:
-
-```json
-{
-  "total": 12599,
-  "distribution": { "strong": 2142, "medium": 7273, "weak": 3150, "fading": 34 },
-  "avg_strength": 0.51,
-  "avg_access_count": 1.3,
-  "max_access_count": 305
-}
 ```
+Standard:   rank = cosine_similarity(query, memory)
+MemVault:   rank = cosine_similarity(query, memory) × strength
+```
+
+A highly relevant but ancient memory scores lower than a moderately relevant recent one — matching how human recall works.
 
 ---
 
 ## 📡 API Reference
 
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/memorize` | Store a conversation |
+| POST | `/retrieve` | Search memories (strength-weighted) |
+| POST | `/decay` | Run Ebbinghaus forgetting curve |
+| GET | `/stats` | Memory statistics |
+| GET | `/health` | Health check |
+
 ### POST `/memorize`
 
-Store a conversation in long-term memory.
-
-```bash
-curl -X POST http://localhost:8002/memorize \
-  -H "Content-Type: application/json" \
-  -d '{
-    "conversation": [
-      {"role": "user", "content": "I just finished reading"s""Project Hail Mary"},
-      {"role": "assistant", "content": "Great book! What did you think of Rocky?"}
-    ],
-    "user_id": "alice"
-  }'
+```json
+{
+  "conversation": [
+    {"role": "user", "content": "I just finished reading Project Hail Mary"},
+    {"role": "assistant", "content": "Great book! What did you think?"}
+  ],
+  "user_id": "alice"
+}
 ```
 
 ### POST `/retrieve`
 
-Retrieve relevant memories with strength-weighted search.
-
-```bash
-curl -X POST http://localhost:8002/retrieve \
-  -H "Content-Type: application/json" \
-  -d '{"query": "what books has the user read?", "user_id": "alice", "limit": 5}'
+```json
+{"query": "what books has the user read?", "user_id": "alice", "limit": 5}
 ```
+
+Response includes `summary`, `strength`, `score`, `access_count`, `source_agent` for each memory.
 
 ### POST `/decay`
 
-Run Ebbinghaus forgetting curve on all memories.
-
-```bash
-curl -X POST "http://localhost:8002/decay?user_id=alice&decay_rate=0.1&damping=0.5"
+```
+POST /decay?user_id=alice&decay_rate=0.1&damping=0.5
 ```
 
-### GET `/stats`
+### Multi-Agent Tagging
 
-Memory statistics and health metrics.
+Tag memories with `source_agent` via metadata role:
 
-```bash
-curl http://localhost:8002/stats?user_id=alice
+```json
+{
+  "conversation": [
+    {"role": "metadata", "content": "{\"source_agent\": \"research-bot\"}"},
+    {"role": "user", "content": "Found 3 new papers on transformers"}
+  ],
+  "user_id": "team"
+}
 ```
-
-### GET `/health`
-
-Service health check.
 
 ---
 
 ## 🔧 Configuration
 
-All settings via environment variables (or `.env` file):
+All via environment variables or `.env` file:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MEMVAULT_DB_DSN` | `postgresql://postgres:postgres@127.0.0.1:5432/memvault` | PostgreSQL connection |
-| `MEMVAULT_EMBEDDING_URL` | `http://127.0.0.1:8001` | Embedding server URL |
-| `MEMVAULT_EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Embedding model name |
-| `MEMVAULT_LLM_BASE_URL` | `http://127.0.0.1:11434/v1` | LLM endpoint (OpenAI-compatible) |
-| `MEMVAULT_LLM_MODEL` | `qwen2.5:3b` | LLM model for extraction |
+| `MEMVAULT_DB_DSN` | `postgresql://...localhost:5432/memvault` | PostgreSQL connection |
+| `MEMVAULT_EMBEDDING_URL` | `http://127.0.0.1:8001` | Embedding server |
+| `MEMVAULT_LLM_BASE_URL` | `http://127.0.0.1:11434/v1` | LLM endpoint |
+| `MEMVAULT_LLM_MODEL` | `qwen2.5:3b` | LLM model |
 | `MEMVAULT_PORT` | `8002` | Server port |
-| `MEMVAULT_TRANSLATION` | `false` | Enable summary translation |
-| `MEMVAULT_TRANSLATION_LANG` | `Chinese` | Target translation language |
-| `MEMVAULT_MEMORY_TYPES` | `event,knowledge` | Memory types to extract |
+| `MEMVAULT_TRANSLATION` | `false` | Enable translation |
+| `MEMVAULT_TRANSLATION_LANG` | `Chinese` | Target language |
+| `MEMVAULT_MEMORY_TYPES` | `event,knowledge` | Types to extract |
 
-### Using a Different LLM
-
-MemVault works with any OpenAI-compatible endpoint:
+### Using Different LLMs
 
 ```bash
 # OpenAI
@@ -193,11 +203,12 @@ MEMVAULT_LLM_BASE_URL=https://api.openai.com/v1
 MEMVAULT_LLM_API_KEY=sk-...
 MEMVAULT_LLM_MODEL=gpt-4o-mini
 
-# Anthropic (via proxy)
-MEMVAULT_LLM_BASE_URL=https://your-proxy.com/v1
-MEMVAULT_LLM_MODEL=claude-sonnet-4-20250514
+# Groq (fast & free)
+MEMVAULT_LLM_BASE_URL=https://api.groq.com/openai/v1
+MEMVAULT_LLM_API_KEY=gsk_...
+MEMVAULT_LLM_MODEL=llama-3.1-8b-instant
 
-# Local (Ollama, LM Studio, vLLM, etc.)
+# Local Ollama (default)
 MEMVAULT_LLM_BASE_URL=http://127.0.0.1:11434/v1
 MEMVAULT_LLM_MODEL=qwen2.5:3b
 ```
@@ -206,47 +217,53 @@ MEMVAULT_LLM_MODEL=qwen2.5:3b
 
 ## 🐾 OpenClaw Integration
 
-MemVault was originally built for [OpenClaw](https://openclaw.ai) multi-agent systems.
+MemVault was built for [OpenClaw](https://openclaw.ai) multi-agent systems.
 
-### Add to your agent's TOOLS.md
+### TOOLS.md snippet
 
 ```markdown
-## MemVault Long-term Memory 🧠
-
-\`\`\`bash
+## MemVault 🧠
 memvault memorize-text "<user_id>" "<content>" "<context>"
 memvault retrieve "<user_id>" "<query>"
-\`\`\`
-
-- MemVault API: 127.0.0.1:8002
-- Embedding: 127.0.0.1:8001
-- PostgreSQL: 127.0.0.1:5432 (Docker)
+- API: 127.0.0.1:8002 | Embedding: 127.0.0.1:8001
 ```
 
-### Set up daily decay cron
-
-Add to your OpenClaw cron jobs:
+### Daily decay cron
 
 ```
-0 3 * * *  curl -s -X POST 'http://127.0.0.1:8002/decay?user_id=YOUR_USER_ID'
+0 3 * * *  curl -s -X POST 'http://127.0.0.1:8002/decay?user_id=YOUR_USER'
 ```
 
-### Multi-Agent Memory
+---
 
-Each agent can tag its memories with `source_agent`:
+## 🐳 Docker (Recommended)
 
-```json
-{
-  "conversation": [
-    {"role": "metadata", "content": "{\"source_agent\": \"research-bot\"}"},
-    {"role": "user", "content": "Found 3 new papers on transformer architectures"},
-    {"role": "assistant", "content": "Noted, adding to research tracking."}
-  ],
-  "user_id": "team"
-}
+```bash
+# Start everything
+docker compose up -d
+
+# Check health
+curl http://localhost:8002/health
+
+# View logs
+docker compose logs -f memvault
+
+# Stop
+docker compose down
+
+# Stop and remove data
+docker compose down -v
 ```
 
-Then filter by source in `/stats` to see which agent contributes what.
+### Custom LLM with Docker
+
+```bash
+# Use OpenAI instead of local Ollama
+MEMVAULT_LLM_BASE_URL=https://api.openai.com/v1 \
+MEMVAULT_LLM_API_KEY=sk-... \
+MEMVAULT_LLM_MODEL=gpt-4o-mini \
+docker compose up -d
+```
 
 ---
 
@@ -254,28 +271,36 @@ Then filter by source in `/stats` to see which agent contributes what.
 
 ```
 memvault/
-├── memvault_server.py     # Main server (FastAPI)
+├── memvault_server.py     # Main API server (FastAPI)
 ├── embedding_server.py    # Local embedding server
 ├── memvault               # CLI tool
+├── Dockerfile             # Multi-stage build
+├── docker-compose.yml     # One-command deployment
 ├── scripts/
-│   ├── setup.sh           # One-command installation
-│   └── start.sh           # Start all services
-├── .env.example           # Configuration template
-├── README.md
-└── LICENSE
+│   ├── setup.sh           # Native installation
+│   └── start.sh           # Start services
+├── examples/
+│   └── basic_usage.py     # Python examples
+├── docs/
+│   └── ARCHITECTURE.md    # Technical architecture
+├── .env.example           # Config template
+└── requirements.txt
 ```
 
 ---
 
 ## 🤝 Contributing
 
-PRs welcome! Some ideas:
+PRs welcome! Ideas:
 
-- [ ] SQLite backend (for simpler deployments)
+- [ ] SQLite backend (simpler deployments)
 - [ ] Memory export/import (JSON/Markdown)
-- [ ] Web dashboard for memory visualization
-- [ ] Configurable decay strategies (beyond Ebbinghaus)
-- [ ] Memory consolidation (merge similar memories)
+- [ ] Web dashboard for visualization
+- [ ] Alternative decay strategies
+- [ ] Memory consolidation (merge similar)
+- [ ] LangChain / AutoGen integration examples
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
@@ -289,6 +314,6 @@ Built on [memU](https://github.com/NevaMind-AI/memU) by NevaMind AI.
 
 <div align="center">
 
-**If MemVault helps your agents remember, give it a ⭐!**
+**If MemVault helps your agents remember, give it a ⭐**
 
 </div>

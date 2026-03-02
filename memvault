@@ -1,34 +1,38 @@
 #!/usr/bin/env bash
-# MemVault CLI — Simple memory operations for AI agents
+# MemVault CLI — Memory operations for AI agents
 set -e
 
 MEMVAULT_URL="${MEMVAULT_URL:-http://localhost:8002}"
 
+_json_escape() {
+    python3 -c "import sys,json; print(json.dumps(sys.stdin.read().strip()))"
+}
+
 case "$1" in
   memorize)
-    USER_ID="${2:-default}"
-    CONV_FILE="$3"
+    USER_ID="${2:-default}"; CONV_FILE="$3"
     [[ -z "$CONV_FILE" ]] && echo "Usage: memvault memorize <user_id> <conv.json>" && exit 1
-    CONV=$(cat "$CONV_FILE")
     curl -s -X POST "$MEMVAULT_URL/memorize" -H "Content-Type: application/json" \
-      -d "{\"conversation\": $CONV, \"user_id\": \"$USER_ID\"}"
+      -d "{\"conversation\": $(cat "$CONV_FILE"), \"user_id\": \"$USER_ID\"}"
     ;;
   memorize-text)
     USER_ID="${2:-default}"; USER_MSG="$3"; ASST_MSG="$4"
     [[ -z "$USER_MSG" ]] && echo "Usage: memvault memorize-text <user_id> <message> [reply]" && exit 1
+    UMSG_JSON=$(echo "$USER_MSG" | _json_escape)
     if [[ -z "$ASST_MSG" ]]; then
-      CONV="[{\"role\": \"user\", \"content\": $(echo "$USER_MSG" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read().strip()))')}]"
+      PAYLOAD="{\"conversation\":[{\"role\":\"user\",\"content\":$UMSG_JSON}],\"user_id\":\"$USER_ID\"}"
     else
-      CONV="[{\"role\": \"user\", \"content\": $(echo "$USER_MSG" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read().strip()))')}, {\"role\": \"assistant\", \"content\": $(echo "$ASST_MSG" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read().strip()))')}]"
+      AMSG_JSON=$(echo "$ASST_MSG" | _json_escape)
+      PAYLOAD="{\"conversation\":[{\"role\":\"user\",\"content\":$UMSG_JSON},{\"role\":\"assistant\",\"content\":$AMSG_JSON}],\"user_id\":\"$USER_ID\"}"
     fi
-    curl -s -X POST "$MEMVAULT_URL/memorize" -H "Content-Type: application/json" \
-      -d "{\"conversation\": $CONV, \"user_id\": \"$USER_ID\"}"
+    curl -s -X POST "$MEMVAULT_URL/memorize" -H "Content-Type: application/json" -d "$PAYLOAD"
     ;;
   retrieve)
     USER_ID="${2:-default}"; QUERY="$3"
     [[ -z "$QUERY" ]] && echo "Usage: memvault retrieve <user_id> <query>" && exit 1
+    QJSON=$(echo "$QUERY" | _json_escape)
     curl -s -X POST "$MEMVAULT_URL/retrieve" -H "Content-Type: application/json" \
-      -d "{\"query\": $(echo "$QUERY" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read().strip()))'), \"user_id\": \"$USER_ID\"}"
+      -d "{\"query\":$QJSON,\"user_id\":\"$USER_ID\"}"
     ;;
   decay)
     USER_ID="${2:-default}"
@@ -47,7 +51,7 @@ case "$1" in
     ;;
   *)
     cat << 'HELP'
-MemVault — Long-term Memory for AI Agents
+🔐 MemVault — Long-term Memory for AI Agents
 
 Commands:
   memorize-text <user_id> <msg> [reply]  Store a single exchange
@@ -62,10 +66,10 @@ Environment:
   MEMVAULT_URL  Server URL (default: http://localhost:8002)
 
 Examples:
-  memvault memorize-text myuser "I prefer dark mode" "Noted!"
-  memvault retrieve myuser "what theme does the user like?"
-  memvault stats myuser
-  memvault decay myuser
+  memvault memorize-text alice "I love Python and dark mode" "Noted!"
+  memvault retrieve alice "what does the user prefer?"
+  memvault stats alice
+  memvault decay alice
 HELP
     ;;
 esac

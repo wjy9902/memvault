@@ -47,12 +47,23 @@ else
 fi
 info "✅ PostgreSQL ready on port $DB_PORT"
 
-# 3. Check Python
+# 3. Check Python (memU requires Python 3.13+)
 if ! command -v python3 &>/dev/null; then
-    err "Python 3 not found. Install Python 3.11+."
+    err "Python 3 not found. Install Python 3.13+."
+    err "  macOS: brew install python@3.13"
+    err "  Linux: https://docs.python.org/3/using/unix.html"
+    err "  Or use Docker: docker compose up"
     exit 1
 fi
 PYVER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+PYMAJOR=$(python3 -c 'import sys; print(sys.version_info.major)')
+PYMINOR=$(python3 -c 'import sys; print(sys.version_info.minor)')
+if [[ "$PYMAJOR" -lt 3 ]] || [[ "$PYMAJOR" -eq 3 && "$PYMINOR" -lt 13 ]]; then
+    err "Python $PYVER detected, but memU requires Python 3.13+."
+    err "  macOS: brew install python@3.13"
+    err "  Or use Docker instead: docker compose up"
+    exit 1
+fi
 info "✅ Python $PYVER"
 
 # 4. Create venv & install deps
